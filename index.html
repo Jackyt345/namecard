@@ -216,7 +216,7 @@
           <ol class="steps">
             <li>打開 <a class="link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio 金鑰頁</a>，用你的 Google 帳號登入。</li>
             <li>按「建立 API 金鑰」，複製出現的一串字。</li>
-            <li>貼到下面，按「儲存」。金鑰只存在這支手機的瀏覽器裡。</li>
+            <li>貼到下面，按「儲存」。之後換手機或換瀏覽器登入，金鑰會自動帶入，不用再貼。</li>
           </ol>
           <label for="key">Gemini API 金鑰</label>
           <input type="password" id="key" autocomplete="off" placeholder="貼上金鑰">
@@ -353,7 +353,7 @@ $('btnLogin').addEventListener('click', function () {
   login(false).then(start).catch(function (e) { toast('登入未完成：' + e.message); });
 });
 $('btnSwitch').addEventListener('click', function () {
-  lsSet('nc_email', null); lsSet('nc_root', null); lsSet('nc_sheet', null);
+  lsSet('nc_email', null); lsSet('nc_root', null); lsSet('nc_sheet', null); lsSet('nc_key', null);
   login(true).then(function () { STORE = null; start(); }).catch(function (e) { toast('切換未完成：' + e.message); });
 });
 
@@ -390,6 +390,20 @@ function alive(id) {
     if (/NEED_LOGIN|登入/.test(e.message)) throw e;
     return null;
   });
+}
+
+/* AI 金鑰同步：存成「名片庫」資料夾的隱藏應用程式屬性，只有本網頁讀得到，換手機或換瀏覽器登入後自動帶回 */
+function cloudKey(k) {
+  return store().then(function (s) {
+    return api(DRIVE + '/' + s.root.id + '?fields=id', { method: 'PATCH', json: { appProperties: { gk: k || null } } });
+  });
+}
+function syncKey(s) {
+  return api(DRIVE + '/' + s.root.id + '?fields=appProperties').then(function (f) {
+    var remote = f && f.appProperties && f.appProperties.gk, local = lsGet('nc_key');
+    if (remote && remote !== local) { lsSet('nc_key', remote); keyState(); }
+    else if (!remote && local) return cloudKey(local);
+  }).catch(function (e) { if (/登入/.test(e.message)) throw e; });
 }
 
 /* 找到或建立「名片庫」與「名片總表」，只會看到本網頁建立的檔案 */
@@ -597,7 +611,7 @@ document.querySelectorAll('nav button').forEach(function (b) { b.addEventListene
 function keyState() {
   var has = !!lsGet('nc_key'), tag = $('keyTag');
   tag.textContent = has ? '已可使用' : '尚未設定'; tag.className = 'tag ' + (has ? 'ok' : 'bad');
-  $('keyMsg').textContent = has ? '金鑰已存在這支手機的瀏覽器。' : '第一次使用需要一把免費的 AI 金鑰，約一分鐘。';
+  $('keyMsg').textContent = has ? '金鑰已儲存，並備份在你自己的 Google 雲端，換手機或換瀏覽器登入後會自動帶入。' : '第一次使用需要一把免費的 AI 金鑰，約一分鐘。';
   $('btnClearKey').style.display = has ? '' : 'none';
   return has;
 }
@@ -614,7 +628,7 @@ function start() {
     $('lnkFolder').href = s.root.webViewLink || ('https://drive.google.com/drive/folders/' + s.root.id);
     $('lnkSheet').href = s.sheetUrl;
     $('lnkXlsx').href = 'https://docs.google.com/spreadsheets/d/' + s.sheetId + '/export?format=xlsx';
-    return readAll();
+    return syncKey(s).then(function () { if (!keyState()) showTab('set'); return readAll(); });
   }).then(function (all) {
     COUNT = all.vals.filter(function (r) { return r[3] || r[5]; }).length;
     showCount();
@@ -623,8 +637,9 @@ function start() {
     $('eventNow').innerHTML = e ? '現在的行程：<b>' + esc(e.title) + '</b>' + (e.location ? '（' + esc(e.location) + '）' : '') + '，拍照會自動記在這場活動。' : '';
   }).catch(function (e) {
     if (e.message !== 'NEED_LOGIN') $('who').textContent = '無法連線雲端：' + e.message;
+    if (!keyState()) showTab('set');
   });
-  if (!keyState()) showTab('set');
+  keyState();
 }
 function showCount() {
   $('who').textContent = (lsGet('nc_email') || '') + '　·　已收 ' + COUNT + ' 張';
@@ -755,9 +770,13 @@ function cardHtml(r) {
 $('btnKey').addEventListener('click', function () {
   var k = $('key').value.trim();
   if (!/^[\w.\-]{20,}$/.test(k)) { toast('金鑰格式看起來不正確，請重新複製'); return; }
-  lsSet('nc_key', k); $('key').value = ''; keyState(); toast('已儲存，可以開始拍名片了'); showTab('up');
+  lsSet('nc_key', k); $('key').value = ''; keyState(); showTab('up');
+  cloudKey(k).then(function () { toast('已儲存，換手機登入也會自動帶入'); }).catch(function () { toast('已儲存在這支手機（雲端同步失敗，下次登入會再試）'); });
 });
-$('btnClearKey').addEventListener('click', function () { lsSet('nc_key', null); keyState(); toast('已移除金鑰'); });
+$('btnClearKey').addEventListener('click', function () {
+  lsSet('nc_key', null); keyState();
+  cloudKey(null).then(function () { toast('已移除金鑰（含雲端備份）'); }).catch(function () { toast('已移除這支手機的金鑰'); });
+});
 keyState();
 
 /* 日曆（選用） */
