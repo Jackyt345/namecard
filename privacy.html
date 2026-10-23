@@ -36,6 +36,7 @@
     <li><b>Google 日曆唯讀（calendar.readonly，選用）</b>：只有你在「設定」中主動開啟日曆比對時才會要求。本工具會讀取拍照時間前後 90 分鐘內你主要日曆上的行程名稱與地點，用來填入「活動名稱」欄位，不會建立、修改或刪除任何日曆內容。</li>
   </ul>
   <p>Google 授權的存取權杖存放在你的瀏覽器中，約一小時後失效。</p>
+  <p>為了讓你換手機或換瀏覽器時不必重新輸入，你填入的 Gemini API 金鑰也會以「應用程式屬性」的形式，備份在你自己雲端硬碟的「名片庫」資料夾上。這項屬性只有本工具讀得到，不會顯示在檔案內容中，也不會傳給開發者；在「設定」按「移除金鑰」即會一併刪除。</p>
 
   <h2>三、Google API 使用者資料的有限使用聲明</h2>
   <p>本工具使用與移轉自 Google API 取得之資訊至任何其他應用程式時，將遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>，包括其中的 Limited Use 要求。具體而言：</p>
@@ -50,7 +51,7 @@
   <p>你上傳的名片照片會在瀏覽器中縮小後，直接從你的瀏覽器傳送到 Google 的 Gemini API 進行文字辨識，使用的是你自行申請並填入的 Gemini API 金鑰。這段傳輸由你與 Google 之間的服務關係規範，適用 <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Gemini API 附加服務條款</a> 與 Google 隱私權政策。依 Google 公告的條款，使用免付費方案時，Google 可能將送出的內容用於改善其產品；如有疑慮，請改用付費方案的金鑰，或避免上傳含有高度敏感資訊的照片。</p>
 
   <h2>五、存在你瀏覽器中的資料</h2>
-  <p>為了讓你不必每次重新設定，本工具會在瀏覽器的本機儲存空間（localStorage）保存：Google 存取權杖、登入帳號的 Email、「名片庫」資料夾與「名片總表」的檔案 ID、你的 Gemini API 金鑰，以及是否開啟日曆比對的設定。這些資料只存在你自己的裝置上，不會傳給開發者。本工具不使用 Cookie，也沒有放置任何流量分析或廣告追蹤程式。</p>
+  <p>為了讓你不必每次重新設定，本工具會在瀏覽器的本機儲存空間（localStorage）保存：Google 存取權杖、登入帳號的 Email、「名片庫」資料夾與「名片總表」的檔案 ID、你的 Gemini API 金鑰，以及是否開啟日曆比對的設定。其中 Gemini API 金鑰另依第二節所述備份在你自己的雲端硬碟；這些資料都不會傳給開發者。本工具不使用 Cookie，也沒有放置任何流量分析或廣告追蹤程式。</p>
 
   <h2>六、網站代管</h2>
   <p>本工具的網頁檔案由 GitHub Pages 代管。你開啟網頁時，GitHub 可能依其政策記錄連線 IP 位址等技術紀錄，相關處理適用 <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub 隱私權聲明</a>。網頁也會從 Google 載入登入元件。</p>
@@ -62,7 +63,7 @@
   <ul>
     <li>照片與試算表存放在你的 Google 雲端硬碟，保存多久由你決定，你可以隨時在雲端硬碟中刪除。</li>
     <li>你可以到 <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google 帳戶的「第三方應用程式和服務」</a> 移除本工具的存取權，移除後本工具將無法再存取你的任何資料。</li>
-    <li>在「設定」按「移除金鑰」可刪除瀏覽器中的 AI 金鑰；清除瀏覽器的網站資料可刪除本工具存在裝置上的所有設定。</li>
+    <li>在「設定」按「移除金鑰」可同時刪除瀏覽器中與雲端備份的 AI 金鑰；清除瀏覽器的網站資料可刪除本工具存在裝置上的所有設定。</li>
   </ul>
 
   <h2>九、兒童</h2>
