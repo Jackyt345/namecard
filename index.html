@@ -133,6 +133,10 @@
   .gbtn { display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 999px; padding: 11px 20px; background: #fff; font: inherit; font-size: 16px; cursor: pointer; }
   .gbtn svg { width: 20px; height: 20px; }
   .hide { display: none !important; }
+  .intro { text-align: left; margin-top: 22px; }
+  .intro p { color: var(--muted); font-size: 14px; line-height: 1.7; margin: 8px 0 0; }
+  footer.legal { text-align: center; font-size: 13px; color: var(--muted); padding: 28px 0 12px; }
+  footer.legal a { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -152,6 +156,10 @@
       用 Google 帳號開始
     </button>
     <p>第一次會請你選帳號並允許存取。照片與表格只會存進你選的那個帳號的雲端。</p>
+    <div class="intro">
+      <p>名片小幫手是免費的網頁工具：用手機拍下名片，由 Google Gemini 辨識內容，照片依「日期_單位_姓名」重新命名後存進你自己的 Google 雲端硬碟，聯絡資料同步寫入你雲端裡的 Google 試算表，之後可以用關鍵字查詢。</p>
+      <p>本工具沒有自己的伺服器，不保存你的任何資料；只會存取它自己建立的「名片庫」資料夾與「名片總表」。</p>
+    </div>
   </div>
 
   <div id="app" class="hide">
@@ -230,6 +238,12 @@
         <p class="hint">「名片庫」可以搬到雲端任何地方或改名，系統會繼續存進去；請不要刪除。</p>
       </div>
       <div class="box">
+        <h3>Google 日曆（選用） <span class="tag" id="calTag"></span></h3>
+        <p>開啟後，沒有填活動名稱時，會用拍照時間比對你 Google 日曆前後 90 分鐘的行程，自動填入活動名稱與地點。只讀取，不會修改日曆。</p>
+        <p class="hint">開啟時 Google 可能顯示「這個應用程式未經驗證」，按「進階」再按「繼續」即可。</p>
+        <div class="row2"><button class="btn" id="btnCal" type="button"></button></div>
+      </div>
+      <div class="box">
         <h3>加到手機主畫面</h3>
         <p>Android（Chrome）：右上角「⋮」→「加到主畫面」。</p>
         <p>iPhone（Safari）：下方「分享」→「加入主畫面」。</p>
@@ -237,13 +251,18 @@
       </div>
     </section>
   </div>
+  <footer class="legal"><a href="privacy.html">隱私權政策</a> · <a href="terms.html">服務條款</a> · <a href="mailto:jackyt345@gmail.com">聯絡我們</a></footer>
 </div>
 <div class="toast" id="toast"></div>
 <script src="https://accounts.google.com/gsi/client" async defer onload="gsiReady()"></script>
 <script>
 /* ========= 設定 ========= */
 var CLIENT_ID = '1001840542628-909robje2qlto2246rulrlapuf822u2c.apps.googleusercontent.com';
-var SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.readonly openid email';
+var SCOPES = 'https://www.googleapis.com/auth/drive.file openid email';
+var CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+function wantCal() { return lsGet('nc_cal') === '1'; }
+function scopeNow() { return SCOPES + (wantCal() ? ' ' + CAL_SCOPE : ''); }
+function hasCal() { return !!(TOKEN && TOKEN.scope && TOKEN.scope.indexOf(CAL_SCOPE) >= 0); }
 var MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'];
 var ROOT_NAME = '名片庫', SHEET_NAME = '名片總表', REVIEW = '待人工確認', WINDOW_MIN = 90;
 var HEADERS = ['日期', '活動名稱', '地點', '姓名', '英文姓名', '機構／公司', '部門', '職稱', '手機', '市話', 'Email', '地址', '網站', '其他聯絡方式', '備註', '照片檔名'];
@@ -299,7 +318,7 @@ function gsiReady() {
     login_hint: lsGet('nc_email') || undefined,
     callback: function (r) {
       if (r.error) { if (pendingLogin) pendingLogin.fail(new Error(r.error)); pendingLogin = null; return; }
-      TOKEN = { v: r.access_token, exp: Date.now() + (Number(r.expires_in) - 60) * 1000 };
+      TOKEN = { v: r.access_token, exp: Date.now() + (Number(r.expires_in) - 60) * 1000, scope: r.scope || '' };
       lsSet('nc_token', JSON.stringify(TOKEN));
       if (pendingLogin) pendingLogin.ok(TOKEN.v);
       pendingLogin = null;
@@ -313,7 +332,8 @@ function gsiReady() {
 function login(selectAccount) {
   return new Promise(function (ok, fail) {
     pendingLogin = { ok: ok, fail: fail };
-    tokenClient.requestAccessToken(selectAccount ? { prompt: 'select_account' } : {});
+    var o = { scope: scopeNow() }; if (selectAccount) o.prompt = 'select_account';
+    tokenClient.requestAccessToken(o);
   });
 }
 
@@ -415,6 +435,7 @@ function readAll() {
 
 /* ========= 日曆 ========= */
 function findEvent(t) {
+  if (!wantCal() || !hasCal()) return Promise.resolve(null);
   var w = WINDOW_MIN * 60000;
   var url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=' +
     encodeURIComponent(new Date(t - w).toISOString()) + '&timeMax=' + encodeURIComponent(new Date(t + w).toISOString());
@@ -585,6 +606,7 @@ function start() {
   $('loginBox').classList.add('hide');
   $('app').classList.remove('hide');
   $('who').textContent = '連線雲端中…';
+  if (typeof calState === 'function') calState();
   api('https://openidconnect.googleapis.com/v1/userinfo').then(function (u) {
     if (u && u.email) { lsSet('nc_email', u.email); $('acct').textContent = u.email; }
     return store();
@@ -737,6 +759,25 @@ $('btnKey').addEventListener('click', function () {
 });
 $('btnClearKey').addEventListener('click', function () { lsSet('nc_key', null); keyState(); toast('已移除金鑰'); });
 keyState();
+
+/* 日曆（選用） */
+function calState() {
+  var on = wantCal();
+  $('calTag').textContent = on ? (hasCal() ? '已開啟' : '待授權') : '未開啟';
+  $('btnCal').textContent = on ? '關閉日曆比對' : '開啟日曆比對';
+}
+$('btnCal').addEventListener('click', function () {
+  if (wantCal()) {
+    lsSet('nc_cal', null); $('eventNow').innerHTML = ''; calState(); toast('已關閉日曆比對'); return;
+  }
+  lsSet('nc_cal', '1');
+  login(false).then(function () {
+    calState();
+    if (hasCal()) { toast('已開啟日曆比對'); start(); }
+    else { lsSet('nc_cal', null); calState(); toast('沒有取得日曆權限，請勾選日曆項目後再試一次'); }
+  }).catch(function (e) { lsSet('nc_cal', null); calState(); toast('未完成：' + e.message); });
+});
+calState();
 </script>
 </body>
 </html>
