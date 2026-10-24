@@ -258,7 +258,6 @@
   <footer class="legal"><a href="privacy.html">隱私權政策</a> · <a href="terms.html">服務條款</a> · <a href="mailto:jackyt345@gmail.com">聯絡我們</a></footer>
 </div>
 <div class="toast" id="toast"></div>
-<script src="https://accounts.google.com/gsi/client" async defer onload="gsiReady()"></script>
 <script>
 /* ========= 設定 ========= */
 var CLIENT_ID = '1001840542628-909robje2qlto2246rulrlapuf822u2c.apps.googleusercontent.com';
@@ -323,34 +322,53 @@ var IN_APP = false;
   });
 })();
 
-/* ========= Google 登入 ========= */
-var TOKEN = null, tokenClient = null, pendingLogin = null;
+/* ========= Google 登入（整頁轉址，手機與主畫面捷徑都能用；過期時自動無聲續登） ========= */
+var TOKEN = null;
+var REDIRECT = location.origin + location.pathname;
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+function ssSet(k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) {} }
 
-function gsiReady() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    login_hint: lsGet('nc_email') || undefined,
-    callback: function (r) {
-      if (r.error) { if (pendingLogin) pendingLogin.fail(new Error(r.error)); pendingLogin = null; return; }
-      TOKEN = { v: r.access_token, exp: Date.now() + (Number(r.expires_in) - 60) * 1000, scope: r.scope || '' };
-      lsSet('nc_token', JSON.stringify(TOKEN));
-      if (pendingLogin) pendingLogin.ok(TOKEN.v);
-      pendingLogin = null;
-    },
-    error_callback: function (e) { if (pendingLogin) pendingLogin.fail(new Error(e.message || e.type || '登入取消')); pendingLogin = null; }
-  });
-  try { var t = JSON.parse(lsGet('nc_token') || 'null'); if (t && t.exp > Date.now()) TOKEN = t; } catch (e) {}
-  if (IN_APP) return;
-  if (TOKEN) start(); else $('loginBox').classList.remove('hide');
+function login(selectAccount, silent, intent) {
+  var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  ssSet('nc_state', st); ssSet('nc_intent', intent || null);
+  var q = {
+    client_id: CLIENT_ID, redirect_uri: REDIRECT, response_type: 'token',
+    scope: scopeNow(), include_granted_scopes: 'true', state: st
+  };
+  var hint = lsGet('nc_email');
+  if (hint && !selectAccount) q.login_hint = hint;
+  if (silent) q.prompt = 'none';
+  else if (selectAccount) q.prompt = 'select_account';
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&');
+  return new Promise(function () {});
 }
 
-function login(selectAccount) {
-  return new Promise(function (ok, fail) {
-    pendingLogin = { ok: ok, fail: fail };
-    var o = { scope: scopeNow() }; if (selectAccount) o.prompt = 'select_account';
-    tokenClient.requestAccessToken(o);
-  });
+function authInit() {
+  var h = location.hash.replace(/^#/, ''), back = null;
+  if (/(^|&)(access_token|error)=/.test(h)) {
+    back = {}; h.split('&').forEach(function (kv) { var i = kv.indexOf('='); back[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); });
+    history.replaceState(null, '', REDIRECT + location.search);
+  }
+  var intent = ssGet('nc_intent');
+  if (back) {
+    var okState = back.state && back.state === ssGet('nc_state');
+    ssSet('nc_state', null); ssSet('nc_intent', null);
+    if (back.access_token && okState) {
+      TOKEN = { v: back.access_token, exp: Date.now() + (Number(back.expires_in || 3600) - 60) * 1000, scope: back.scope || '' };
+      lsSet('nc_token', JSON.stringify(TOKEN)); ssSet('nc_silent', null);
+      if (intent === 'cal') setTimeout(function () { if (hasCal()) toast('已開啟日曆比對'); else { lsSet('nc_cal', null); toast('沒有取得日曆權限，請勾選日曆項目後再試一次'); } calState(); }, 0);
+    } else if (back.error) {
+      if (intent === 'cal') lsSet('nc_cal', null);
+      if (back.error !== 'interaction_required' && back.error !== 'login_required' && back.error !== 'consent_required' && back.error !== 'account_selection_required') toast('登入未完成：' + back.error);
+    }
+  }
+  if (!TOKEN) { try { var t = JSON.parse(lsGet('nc_token') || 'null'); if (t && t.exp > Date.now()) TOKEN = t; } catch (e) {} }
+  if (IN_APP) return;
+  if (TOKEN) { start(); return; }
+  /* 曾在這支手機登入過：自動無聲續登一次，不用再按按鈕 */
+  var last = Number(ssGet('nc_silent') || 0);
+  if (lsGet('nc_email') && !back && Date.now() - last > 60000) { ssSet('nc_silent', String(Date.now())); $('who').textContent = '自動登入中…'; login(false, true); return; }
+  $('loginBox').classList.remove('hide');
 }
 
 function token() {
@@ -360,17 +378,19 @@ function token() {
 
 function needLogin() {
   TOKEN = null; lsSet('nc_token', null);
+  if (!busy && lsGet('nc_email') && Date.now() - Number(ssGet('nc_silent') || 0) > 60000) { ssSet('nc_silent', String(Date.now())); login(false, true); return; }
   $('app').classList.add('hide');
   $('loginBox').classList.remove('hide');
-  $('loginBox').querySelector('p').textContent = '登入已過期（每小時需確認一次），請再按一次。';
+  $('loginBox').querySelector('p').textContent = '登入已過期，請再按一次。';
 }
 
 $('btnLogin').addEventListener('click', function () {
-  login(!lsGet('nc_email')).then(start).catch(function (e) { toast('登入未完成：' + e.message); });
+  login(!lsGet('nc_email'));
 });
 function logout() {
   var t = TOKEN && TOKEN.v;
-  if (t && window.google && google.accounts && google.accounts.oauth2) { try { google.accounts.oauth2.revoke(t, function () {}); } catch (e) {} }
+  if (t) { try { fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(t), { method: 'POST', mode: 'no-cors' }); } catch (e) {} }
+  ssSet('nc_silent', String(Date.now()));
   TOKEN = null; STORE = null; COUNT = 0;
   ['nc_token', 'nc_email', 'nc_root', 'nc_sheet', 'nc_key', 'nc_cal'].forEach(function (k) { lsSet(k, null); });
   $('app').classList.add('hide');
@@ -387,7 +407,8 @@ $('btnLogout').addEventListener('click', function () { if (confirm('確定要登
 $('btnLogout2').addEventListener('click', function () { if (confirm('確定要登出嗎？')) logout(); });
 $('btnSwitch').addEventListener('click', function () {
   lsSet('nc_email', null); lsSet('nc_root', null); lsSet('nc_sheet', null); lsSet('nc_key', null);
-  login(true).then(function () { STORE = null; start(); }).catch(function (e) { toast('切換未完成：' + e.message); });
+  lsSet('nc_token', null); TOKEN = null;
+  login(true);
 });
 
 /* ========= API 呼叫 ========= */
@@ -729,7 +750,7 @@ function run() {
     b.className = 'retry'; b.textContent = '重試';
     b.onclick = function () {
       var go = function () { b.remove(); setStatus(job, '', '<span class="spin"></span>等待上傳'); queue.unshift(job); run(); };
-      if (TOKEN && TOKEN.exp > Date.now()) go(); else login(false).then(function () { $('loginBox').classList.add('hide'); $('app').classList.remove('hide'); go(); });
+      if (TOKEN && TOKEN.exp > Date.now()) go(); else { toast('需要重新登入，登入後請重新上傳這張照片'); login(false); }
     };
     job.el.querySelector('.body').appendChild(b);
   }).then(function () { busy = false; run(); });
@@ -824,13 +845,10 @@ $('btnCal').addEventListener('click', function () {
     lsSet('nc_cal', null); $('eventNow').innerHTML = ''; calState(); toast('已關閉日曆比對'); return;
   }
   lsSet('nc_cal', '1');
-  login(false).then(function () {
-    calState();
-    if (hasCal()) { toast('已開啟日曆比對'); start(); }
-    else { lsSet('nc_cal', null); calState(); toast('沒有取得日曆權限，請勾選日曆項目後再試一次'); }
-  }).catch(function (e) { lsSet('nc_cal', null); calState(); toast('未完成：' + e.message); });
+  login(false, false, 'cal');
 });
 calState();
+authInit();
 </script>
 </body>
 </html>
